@@ -1,23 +1,9 @@
-
-
-//---------------------------------------------------------------------------
-
-#include <iowahills/PFiftyOneRevE.h>
-#include <iowahills/QuadRootsRevH.h>
-
-#include <math.h>
-#include <new>     // Defines new(std::nothrow)
-
-#include <iowahills/CplxDMath.hpp>
-
-//---------------------------------------------------------------------------
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- Sept 21, 2016  Rev E
+ This software is part of iowahills_dsp, a set of DSP routines under MIT License.
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
+ Copyright (c) 2021  Hayati Ayguen <h_ayguen@web.de>
+ All rights reserved.
 
- If you find a problem with this code, please leave a note on:
- http://www.iowahills.com/feedbackcomments.html
 
  This is for polynomials with real coefficients, up to 100th order.
 
@@ -47,6 +33,23 @@
  This returns Degree on success, 0 on failure.
 */
 
+#include <iowahills/PFiftyOneRevE.h>
+#include <iowahills/QuadRootsRevH.h>
+
+#include "non_throwing_vector.h"
+
+#include <cmath>
+
+// This value for LDBL_EPSILON is for an 80 bit variable (64 bit significand). It should be in float.h
+#define LDBL_EPSILON 1.084202172485504434E-19L    // = 2^-63
+#define MAX_NUM_ANGLES  180       // The number of defined angles for initializing TUV.
+#define REAL_ITER_MAX   20        // Max number of iterations in RealIterate.
+#define QUAD_ITER_MAX   20        // Max number of iterations in QuadIterate.
+#define MAX_NUM_K       4         // This is the number of methods we have to define K.
+#define MAX_NEWT_ITERS  10        // Used to limit the Newton Iterations in the GetX function.
+#define TINY_VALUE  1.0E-30       // This is what we use to test for zero. Usually to avoid divide by zero.
+#define HUGE_VALUE  1.0E200       // This gets used to test for imminent overflow.
+
 //---------------------------------------------------------------------------
 
 // None of the code uses long double variables except for the P51 root finder code
@@ -74,27 +77,26 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
   }
 
  TUpdateStatus UpdateStatus;
- int N, NZ, j, Iter, AngleNumber, TypeOfK;
+ int NZ, j, Iter, AngleNumber, TypeOfK;
  long double RealZero, QuadX;
  long double TUV[3];
- long double *P, *QuadQP, *RealQP, *QuadK, *RealK, *QK;
 
- N = Degree;  // N is decremented as roots are found.
+ int N = Degree;  // N is decremented as roots are found.
 
- P =      new(std::nothrow) long double[N+2];
- QuadQP = new(std::nothrow) long double[N+2];
- RealQP = new(std::nothrow) long double[N+2];
- QuadK  = new(std::nothrow) long double[N+2];
- RealK  = new(std::nothrow) long double[N+2];
- QK     = new(std::nothrow) long double[N+2];
- if(P == NULL || QuadQP == NULL || RealQP == NULL || QuadK == NULL || RealK == NULL || QK == NULL)
+ NonThrowingVector<long double> P(N+2);
+ NonThrowingVector<long double> QuadQP(N+2);
+ NonThrowingVector<long double> RealQP(N+2);
+ NonThrowingVector<long double> QuadK(N+2);
+ NonThrowingVector<long double> RealK(N+2);
+ NonThrowingVector<long double> QK(N+2);
+ if(!P || !QuadQP || !RealQP || !QuadK || !RealK || !QK)
   {
    //ShowMessage("Memory not Allocated in PFiftyOne root finder.");
    return(0);
   }
 
- for(j=0; j<=N; j++)P[j] = Coeff[j];                // Copy the coeff. P gets modified.
- for(j=0; j<N; j++)RealRoot[j] = ImagRoot[j] = 0.0; // Init to zero, in case any leading or trailing zeros are removed.
+ for(j=0; j<=N; j++)    P[j] = Coeff[j];                // Copy the coeff. P gets modified.
+ for(j=0; j<N; j++) RealRoot[j] = ImagRoot[j] = 0.0;    // Init to zero, in case any leading or trailing zeros are removed.
 
  // Remove trailing zeros. A tiny P[N] relative to P[N-1] is not allowed.
  while(N > 0 && fabsl(P[N]) <= TINY_VALUE * fabsl(P[N-1]) )
@@ -116,6 +118,10 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
    P[0] = 1.0;
   }
 
+ // PreQPN and FirstDamperlIter were both static inside deep functions - making these functions NON thread-safe
+ long double PrevQPN = 0.0;
+ int FirstDamperlIter = 0;
+
  TypeOfK = 0;
  while(N > 4 && TypeOfK < MAX_NUM_K )
   {
@@ -129,21 +135,20 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
        SetTUVandK(P, N, TUV, RealK, QuadK, QuadX, AngleNumber, TypeOfK);     // Init TUV and both K's
        for(Iter=0; Iter<N && NZ==0; Iter++)                                  // Allow N calls to QuadIterate for N*QUAD_ITER_MAX iterations, then try a different angle.
         {
-         NZ = QuadIterate(Iter, P, QuadQP, QuadK, QK, N, TUV, &UpdateStatus);   // NZ = 2 for a pair of complex roots or 2 real roots.
+         NZ = QuadIterate(FirstDamperlIter, Iter, P, QuadQP, QuadK, QK, N, TUV, &UpdateStatus);   // NZ = 2 for a pair of complex roots or 2 real roots.
 
          if(NZ == 0) // Try for a real root.
           {
            if(fabsl(QuadK[N-2]) > TINY_VALUE * fabsl(P[N]) )RealZero = -P[N]/QuadK[N-2]; // This value gets refined by QuadIterate.
            else RealZero = 0.0;
-           NZ = RealIterate(Iter, P, RealQP, RealK, QK, N, &RealZero);         // NZ = 1 for a single real root.
+           NZ = RealIterate(PrevQPN, Iter, P, RealQP, RealK, QK, N, &RealZero);     // NZ = 1 for a single real root.
           }
 
-         if(NZ == 0 && UpdateStatus == BAD_ANGLE)break;                       // If RealIterate failed and UpdateTUV called this a bad angle, it's pointless to iterate further on this angle.
+         if(NZ == 0 && UpdateStatus == BAD_ANGLE)   break;                     // If RealIterate failed and UpdateTUV called this a bad angle, it's pointless to iterate further on this angle.
 
         } // Iter loop       Note the use of NZ in the loop controls.
       } // AngleNumber loop
     } // TypeOfK loop
-
 
 
    // Done iterating. If NZ==0 at this point, we failed and will exit below.
@@ -168,7 +173,6 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
     }
 
 
-
    // Remove any trailing zeros on P.  P[N] should never equal zero, but can approach  zero
    // because of roundoff errors. If P[N] is zero or tiny relative to P[N-1], we take the hit,
    // and place a root at the origin. This needs to be checked, but virtually never happens.
@@ -183,11 +187,6 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
 
   }  // The outermost loop while(N > 2)
 
- delete[] QuadQP;
- delete[] RealQP;
- delete[] QuadK;
- delete[] RealK;
- delete[] QK;
 
  // Done, except for the last 1 or 2 roots. If N isn't 1 or 2 at this point, we failed.
  if(N == 1)
@@ -195,7 +194,6 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
    j = Degree - N;
    RealRoot[j] = -P[1]/P[0];
    ImagRoot[j] = 0.0;
-   delete[] P;
    return(Degree);
   }
 
@@ -203,7 +201,6 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
   {
    j = Degree - N;
    QuadRoots(P, &RealRoot[j], &ImagRoot[j]);
-   delete[] P;
    return(Degree);
   }
 
@@ -211,7 +208,6 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
   {
    j = Degree - N;
    CubicRoots(P, &RealRoot[j], &ImagRoot[j]);
-   delete[] P;
    return(Degree);
   }
 
@@ -219,13 +215,11 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
   {
    j = Degree - N;
    BiQuadRoots(P, &RealRoot[j], &ImagRoot[j]);
-   delete[] P;
    return(Degree);
   }
 
  // ShowMessage("The P51 root finder failed to converge on a solution.");
  return(0);
-
 }
 
 //---------------------------------------------------------------------------
@@ -241,28 +235,24 @@ int PFiftyOne(long double *Coeff, int Degree, long double *RealRoot, long double
 // where the root locations and poly orders fall within a narrow range, esp low order, then
 // ErrScalar can be modified to give more accurate results.
 
-int QuadIterate(int P51_Iter, long double *P, long double *QP, long double *K, long double *QK, int N, long double *TUV, TUpdateStatus *UpdateStatus)
+int QuadIterate(int &FirstDamperlIter, int P51_Iter, long double *P, long double *QP, long double *K, long double *QK, int N, long double *TUV, TUpdateStatus *UpdateStatus)
 {
- int Iter;
- long double Err, MinErr, ErrScalar, QKCheck;
-
- ErrScalar = 1.0 / ( 16.0 * powl((long double)N, 3.0) * fabsl(P[N]) );
-
+ const long double ErrScalar = 1.0 / ( 16.0 * powl((long double)N, 3.0) * fabsl(P[N]) );
+ long double MinErr = 1.0E100;
  P51_Iter *= QUAD_ITER_MAX;
- Err = MinErr = 1.0E100;
  *UpdateStatus = UPDATED;
  QuadSynDiv(P, N, TUV, QP);    // Init QP
  QuadSynDiv(K, N-1, TUV, QK);  // Init QK
 
- for(Iter=0; Iter<QUAD_ITER_MAX; Iter++)
+ for(int Iter=0; Iter<QUAD_ITER_MAX; Iter++)
   {
-   UpdateTUV(P51_Iter+Iter, P, N, QP, K, QK, TUV, UpdateStatus);
+   UpdateTUV(FirstDamperlIter, P51_Iter+Iter, P, N, QP, K, QK, TUV, UpdateStatus);
    if(*UpdateStatus == BAD_ANGLE)
     {
      return(0);  // Failure, need a different angle.
     }
 
-   Err = fabsl(QP[N-1]) +  fabsl(QP[N+1]);   // QP[N-1] & QP[N+1] are the remainder terms of P/TUV.
+   long double Err = fabsl(QP[N-1]) +  fabsl(QP[N+1]);   // QP[N-1] & QP[N+1] are the remainder terms of P/TUV.
    Err *= ErrScalar;                         // Normalize the error.
 
    if(Err < LDBL_EPSILON)
@@ -286,7 +276,7 @@ int QuadIterate(int P51_Iter, long double *P, long double *QP, long double *K, l
       }
     }
 
-   QKCheck = fabsl(QK[N-2]) +  fabsl(QK[N]);  // QK[N-2] & QK[N] are the remainder terms of K/TUV.
+   long double QKCheck = fabsl(QK[N-2]) +  fabsl(QK[N]);  // QK[N-2] & QK[N] are the remainder terms of K/TUV.
    QKCheck *= ErrScalar;
 
    // Huge values indicate the algorithm is diverging and overflow is imminent. This can indicate
@@ -325,15 +315,13 @@ int QuadIterate(int P51_Iter, long double *P, long double *QP, long double *K, l
 // we have either stalled in a dead zone, or we lack the needed precision to further refine TUV.
 // TUV = tx^2 + ux + v    t = 1 always.   v = 0 (a root at the origin) isn't allowed.
 // The poly degrees are P[N] QP[N-2] K[N-1] QK[N-3]
-void UpdateTUV(int Iter, long double *P, int N, long double *QP, long double *K, long double *QK, long double *TUV, TUpdateStatus *UpdateStatus)
+void UpdateTUV(int &FirstDamperlIter, int Iter, long double *P, int N, long double *QP, long double *K, long double *QK, long double *TUV, TUpdateStatus *UpdateStatus)
 {
- int j;
  long double DelU, DelV, Denom;
  long double E2, E3, E4, E5;
- static int FirstDamperlIter;
 
- if(Iter == 0)FirstDamperlIter = 0;  // Reset this static var.
- if(*UpdateStatus == DAMPER_ON)FirstDamperlIter = Iter;
+ if(Iter == 0)  FirstDamperlIter = 0;  // Reset this static var.
+ if(*UpdateStatus == DAMPER_ON) FirstDamperlIter = Iter;
 
  // Update K, unless E3 is tiny relative to E2. The algorithm will work its way out of a tiny E3.
  // These equations are from the Jenkins and Traub paper "A Three Stage Algorithm for Real Polynomials Using Quadratic Iteration" Equation 9.8
@@ -343,11 +331,11 @@ void UpdateTUV(int Iter, long double *P, int N, long double *QP, long double *K,
  if(fabsl(E3) * HUGE_VALUE > fabsl(E2) )
   {
    E2 /= -E3;
-   for(j=1; j<=N-2; j++)K[j] = E2*QK[j-1] + QP[j]; // At covergence, E2 ~ 0, so K ~ QP.
+   for(int j=1; j<=N-2; j++)    K[j] = E2*QK[j-1] + QP[j]; // At covergence, E2 ~ 0, so K ~ QP.
   }
  else
   {
-   for(j=1; j<=N-2; j++)K[j] = QK[j-1];
+   for(int j=1; j<=N-2; j++)    K[j] = QK[j-1];
   }
  K[0] = QP[0]; // QP[0] = 1.0 always
  K[N-1] = 0.0;
@@ -431,28 +419,25 @@ void UpdateTUV(int Iter, long double *P, int N, long double *QP, long double *K,
 // The return value is either 1 or 0, the number of roots found. On return, RealZero contains
 // the root, and QP contains the next P (i.e. P with this root removed).
 // As with QuadIterate, at convergence, K = QP
-int RealIterate(int P51_Iter, long double *P, long double *QP, long double *K, long double *QK, int N, long double *RealZero)
+int RealIterate(long double &PrevQPN, int P51_Iter, long double *P, long double *QP, long double *K, long double *QK, int N, long double *RealZero)
 {
- int Iter, k;
- long double X, DelX, Damper, Err, ErrScalar;
- static long double PrevQPN;
-
- ErrScalar = 1.0 / ( 16.0 * powl((long double)N, 2.0) * fabsl(P[N]) );
+ long double X, DelX, Damper, Err;
+ const long double ErrScalar = 1.0 / ( 16.0 * powl((long double)N, 2.0) * fabsl(P[N]) );
 
  X = *RealZero;        // Init with our best guess for X.
- if(P51_Iter==0)PrevQPN = 0.0;
+ if(P51_Iter==0)    PrevQPN = 0.0;
  QK[0] = K[0];
- for(k=1; k<=N-1; k++)
+ for(int k=1; k<=N-1; k++)
   {
    QK[k] = QK[k-1]*X + K[k];
   }
 
- for(Iter=0; Iter<REAL_ITER_MAX; Iter++)
+ for(int Iter=0; Iter<REAL_ITER_MAX; Iter++)
   {
    // Calculate a new QP.  This is poly division  QP = P/(x+X)  QP[0] to QP[N-1] is the quotient.
    // The remainder is QP[N], which is P(X), the error term.
    QP[0] = P[0];
-   for(k=1; k<=N; k++)
+   for(int k=1; k<=N; k++)
     {
      QP[k] = QP[k-1]*X + P[k];
     }
@@ -471,7 +456,7 @@ int RealIterate(int P51_Iter, long double *P, long double *QP, long double *K, l
     {
      DelX = -QP[N]/QK[N-1];
      K[0] = QP[0];
-     for(k=1; k<=N-1; k++)
+     for(int k=1; k<=N-1; k++)
       {
        K[k] = DelX*QK[k-1] + QP[k];
       }
@@ -479,14 +464,14 @@ int RealIterate(int P51_Iter, long double *P, long double *QP, long double *K, l
    else  // Use this if QK[N-1] ~ 0
     {
      K[0] = 0.0;
-     for(k=1; k<=N-1; k++)K[k] = QK[k-1];
+     for(int k=1; k<=N-1; k++)  K[k] = QK[k-1];
     }
 
    if(fabsl(K[N-1]) > HUGE_VALUE)return(0); // Overflow is imminent.
 
    // Calculate a new QK.  This is poly division QK = K /(x+X).  QK[0] to QK[N-2] is the quotient.
    QK[0] = K[0];
-   for(k=1; k<=N-1; k++)
+   for(int k=1; k<=N-1; k++)
     {
      QK[k] = QK[k-1]*X + K[k];
     }
@@ -495,7 +480,7 @@ int RealIterate(int P51_Iter, long double *P, long double *QP, long double *K, l
    // This algorithm routinely oscillates back and forth about a zero with nearly equal pos and neg error magnitudes.
    // If the current and previous error add to give a value less than the current error, we dampen the change.
    Damper = 1.0;
-   if( fabsl(QP[N] + PrevQPN) < fabsl(QP[N]) )Damper = 0.5;
+   if( fabsl(QP[N] + PrevQPN) < fabsl(QP[N]) )  Damper = 0.5;
    PrevQPN = QP[N];
 
    // QP[N] is P(X) and at convergence QK[N-1] ~ P'(X), so this is ~ Newtons Method.
@@ -525,9 +510,8 @@ int RealIterate(int P51_Iter, long double *P, long double *QP, long double *K, l
 // Derivative of P. Called from SetTUVandK().
 void DerivOfP(long double *P, int N, long double *dP)
 {
- int j;
  long double Power;
- for(j=0; j<N; j++)
+ for(int j=0; j<N; j++)
   {
    Power = N - j;
    dP[j] = Power * P[j];
@@ -543,10 +527,9 @@ void DerivOfP(long double *P, int N, long double *dP)
 // These form a 1st order remainder b*x + (b*u + a).
 void QuadSynDiv(long double *P, int N, long double *TUV, long double *Q)
 {
- int j;
  Q[0] = P[0];
  Q[1] = P[1] - TUV[1] * Q[0];
- for(j=2; j<=N; j++)
+ for(int j=2; j<=N; j++)
   {
    Q[j] = P[j] - TUV[1]*Q[j-1] - TUV[2]*Q[j-2];
   }
@@ -559,7 +542,7 @@ void QuadSynDiv(long double *P, int N, long double *TUV, long double *Q)
 //---------------------------------------------------------------------------
 
 // This function intializes the TUV and K polynomials.
-void SetTUVandK(long double *P, int N, long double *TUV, long double *RealK, long double *QuadK, long double X, int AngleNumber, int TypeOfQuadK)
+int SetTUVandK(long double *P, int N, long double *TUV, long double *RealK, long double *QuadK, long double X, int AngleNumber, int TypeOfQuadK)
 {
  int j;
  long double a, Theta;
@@ -615,17 +598,16 @@ const long double Angle[] =
  // us a way to work out of the stall. All these inits work almost as well as P".
  if(TypeOfQuadK == 0)  // Init QuadK 2nd derivative of P
   {
-   long double *Temp = new(std::nothrow) long double[N+2];
-   if(Temp == NULL)
+   NonThrowingVector<long double> Temp(N+2);
+   if(!Temp)
     {
      //ShowMessage("Memory not Allocated in PFiftyOne SetTUVandK.");
-     return;
+     return 1;
     }
 
    DerivOfP(P, N, Temp);
    DerivOfP(Temp, N-1, QuadK);
    QuadK[N] = QuadK[N-1] = 0.0;
-   delete[] Temp;
   }
 
  else if(TypeOfQuadK == 1) // Set QuadK to QP, because K = QP at convergence.
@@ -649,6 +631,7 @@ const long double Angle[] =
  if(QuadK[0] == 0.0)QuadK[0] = 1.0; // This can happen if TypeOfQuadK == 2 and P[1] == 0.0
  for(j=N-2; j>0; j--)QuadK[j] /= QuadK[0];
  QuadK[0] = 1.0;
+ return 0;
 }
 
 //---------------------------------------------------------------------------

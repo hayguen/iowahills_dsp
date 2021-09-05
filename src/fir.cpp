@@ -1,14 +1,9 @@
-
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- If you find a problem, please leave a note at:
- http://www.iowahills.com/feedbackcomments.html
- May 1, 2016
+ This software is part of iowahills_dsp, a set of DSP routines under MIT License.
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
+ Copyright (c) 2021  Hayati Ayguen <h_ayguen@web.de>
+ All rights reserved.
 
- ShowMessage is a C++ Builder function, and it usage has been commented out.
- If you are using C++ Builder, include vcl.h for ShowMessage.
- Otherwise replace ShowMessage with something appropriate for yor compiler.
 
  RectWinFIR() generates the impulse response for a rectangular windowed low pass, high pass,
  band pass, or notch filter. Then a window, such as the Kaiser, is applied to the FIR coefficients.
@@ -21,10 +16,19 @@
  double BW      0.0 < BW < 1.0       The band width if BPF or NOTCH
 */
 
-#include <iowahills/FIRFilterCode.h>
+#include <iowahills/fir.h>
+#include <iowahills/goertzel.h>
 
-#include <math.h>
-#include <new>   // For the new operator.
+#include "non_throwing_vector.h"
+
+#include <cmath>
+
+//---------------------------------------------------------------------------
+
+#define NUM_FREQ_ERR_PTS  1000    // these are only used in the FIRFreqError function.
+#define dNUM_FREQ_ERR_PTS 1000.0
+
+//---------------------------------------------------------------------------
 
 // Rectangular Windowed FIR. The equations used here are developed in numerous textbooks.
 int RectWinFIR(double *FirCoeff, int NumTaps, TFIRPassTypes PassType, double OmegaC, double BW)
@@ -112,21 +116,21 @@ double iowa_Sinc(double x)
 
 // Used to reduce the sinc(x) effects on a set of FIR coefficients. This will, unfortunately,
 // widen the filter's transition band, but the stop band attenuation will improve dramatically.
-void FIRFilterWindow(double *FIRCoeff, int N, TWindowType WindowType, double Beta)
+int FIRFilterWindow(double *FIRCoeff, int N, TWindowType WindowType, double Beta)
 {
- if(WindowType == wtNONE) return;
+ if(WindowType == wtNONE) return 1;
 
  int j;
- double dN, *WinCoeff;
+ double dN;
 
  if(Beta < 0.0)Beta = 0.0;
  if(Beta > 10.0)Beta = 10.0;
 
- WinCoeff  = new(std::nothrow) double[N+2];
- if(WinCoeff == NULL)
+ NonThrowingVector<double> WinCoeff(N+2);
+ if(!WinCoeff)
   {
    // ShowMessage("Failed to allocate memory in WindowData() ");
-   return;
+   return 1;
   }
 
  // Calculate the window for N/2 points, then fold the window over (at the bottom).
@@ -137,37 +141,35 @@ void FIRFilterWindow(double *FIRCoeff, int N, TWindowType WindowType, double Bet
    for(j=0; j<N; j++)
 	{
 	 Arg = Beta * sqrt(1.0 - pow( ((double)(2*j+2) - dN) / dN, 2.0) );
-	 WinCoeff[j] = Bessel(Arg) / Bessel(Beta);
+     WinCoeff[j] = iowa_Bessel(Arg) / iowa_Bessel(Beta);
 	}
   }
 
  else if(WindowType == wtSINC)  // Lanczos
   {
-   for(j=0; j<N; j++)WinCoeff[j] = iowa_Sinc((double)(2*j+1-N)/dN * M_PI );
-   for(j=0; j<N; j++)WinCoeff[j] = pow(WinCoeff[j], Beta);
+   for(j=0; j<N; j++)   WinCoeff[j] = iowa_Sinc((double)(2*j+1-N)/dN * M_PI );
+   for(j=0; j<N; j++)   WinCoeff[j] = pow(WinCoeff[j], Beta);
   }
 
  else if(WindowType == wtSINE)  // Hanning if Beta = 2
   {
-   for(j=0; j<N/2; j++)WinCoeff[j] = sin((double)(j+1) * M_PI / dN);
-   for(j=0; j<N/2; j++)WinCoeff[j] = pow(WinCoeff[j], Beta);
+   for(j=0; j<N/2; j++) WinCoeff[j] = sin((double)(j+1) * M_PI / dN);
+   for(j=0; j<N/2; j++) WinCoeff[j] = pow(WinCoeff[j], Beta);
   }
 
  else // Error.
   {
    // ShowMessage("Incorrect window type in WindowFFTData");
-   delete[] WinCoeff;
-   return;
+   return 1;
   }
 
  // Fold the coefficients over.
- for(j=0; j<N/2; j++)WinCoeff[N-j-1] = WinCoeff[j];
+ for(j=0; j<N/2; j++)   WinCoeff[N-j-1] = WinCoeff[j];
 
  // Apply the window to the FIR coefficients.
- for(j=0; j<N; j++)FIRCoeff[j] *= WinCoeff[j];
+ for(j=0; j<N; j++) FIRCoeff[j] *= WinCoeff[j];
 
- delete[] WinCoeff;
-
+ return 0;
 }
 
 //---------------------------------------------------------------------------
@@ -178,7 +180,8 @@ void FilterWithFIR(double *FirCoeff, int NumTaps, double *Signal, double *Filter
  int j, k, n, Top = 0;
  double y, Reg[MAX_NUMTAPS];
 
- for(j=0; j<NumTaps; j++)Reg[j] = 0.0;
+ for(j=0; j<NumTaps; j++)
+   Reg[j] = 0.0;
 
  for(j=0; j<NumSigPts; j++)
   {
@@ -212,16 +215,19 @@ void FilterWithFIR2(double *FirCoeff, int NumTaps, double *Signal, double *Filte
  int j, k;
  double y, Reg[MAX_NUMTAPS];
 
- for(j=0; j<NumTaps; j++)Reg[j] = 0.0; // Init the delay registers.
+ for(j=0; j<NumTaps; j++)
+   Reg[j] = 0.0; // Init the delay registers.
 
  for(j=0; j<NumSigPts; j++)
  {
   // Shift the register values down and set Reg[0].
-  for(k=NumTaps; k>1; k--)Reg[k-1] = Reg[k-2];
+  for(k=NumTaps; k>1; k--)
+    Reg[k-1] = Reg[k-2];
   Reg[0] = Signal[j];
 
   y = 0.0;
-  for(k=0; k<NumTaps; k++)y += FirCoeff[k] * Reg[k];
+  for(k=0; k<NumTaps; k++)
+    y += FirCoeff[k] * Reg[k];
   FilteredSignal[j] = y;
  }
 
@@ -344,54 +350,5 @@ void FIRFreqError(double *Coeff, int NumTaps, int PassType, double *OmegaC, doub
 
 }
 
-//-----------------------------------------------------------------------------
-
-// This shows how to adjust the delay of an FIR by a fractional amount.
-// We take the FFT of the FIR coefficients to get to the frequency domain,
-// then apply the Laplace delay operator, and then do an inverse FFT.
-
-// Use this function last. i.e. After the window was applied to the coefficients.
-// The Delay value is in terms of a fraction of a sample (not in terms of sampling freq).
-// Delay may be pos or neg. Typically a filter's delay can be adjusted by +/- NumTaps/20
-// without affecting its performance significantly. A typical Delay value would be 0.75
-void AdjustDelay(double *FirCoeff, int NumTaps, double Delay)
-{
- int j, FFTSize;
- double *FFTInputR, *FFTInputI, Arg, Temp;
- FFTSize = RequiredFFTSize(NumTaps+(int)fabs(Delay)+1); // Zero pad by at least Delay + 1 to prevent the impulse response from wrapping around.
-
- FFTInputR  = new(std::nothrow) double[FFTSize];  // Real part
- FFTInputI  = new(std::nothrow) double[FFTSize];  // Imag part
- if(FFTInputR == NULL || FFTInputI == NULL)
-  {
-   //ShowMessage("Unable to allocate memory in AdjustDelay");
-   return;
-  }
- for(j=0; j<FFTSize; j++)FFTInputR[j] = FFTInputI[j] = 0.0; // A mandatory init.
- for(j=0; j<NumTaps; j++)FFTInputR[j] = FirCoeff[j];        // Fill the real part with the FIR coeff.
-
- FFT(FFTInputR, FFTInputI, FFTSize, FORWARD);              // Do an FFT
- for(j=0; j<=FFTSize/2; j++)                               // Apply the Laplace Delay operator e^(-j*omega*Delay).
-  {
-   Arg = -Delay * (double)j / (double)FFTSize * M_2PI;     // This is -Delay * (the FFT bin frequency).
-   Temp =         cos(Arg)*FFTInputR[j] - sin(Arg)*FFTInputI[j];
-   FFTInputI[j] = cos(Arg)*FFTInputI[j] + sin(Arg)*FFTInputR[j];
-   FFTInputR[j] = Temp;
-  }
- for(j=1; j<FFTSize/2; j++) // Fill the neg freq bins with the conjugate values.
-  {
-   FFTInputR[FFTSize-j] = FFTInputR[j];
-   FFTInputI[FFTSize-j] = -FFTInputI[j];
-  }
-
- FFT(FFTInputR, FFTInputI, FFTSize, INVERSE); // Inverse FFT
- for(j=0; j<NumTaps; j++)
-  {
-   FirCoeff[j] = FFTInputR[j];
-  }
-
- delete[] FFTInputR;
- delete[] FFTInputI;
-}
 //-----------------------------------------------------------------------------
 

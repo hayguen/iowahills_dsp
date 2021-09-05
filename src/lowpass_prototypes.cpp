@@ -1,14 +1,9 @@
-
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- If you find a problem, please leave a note at:
- http://www.iowahills.com/feedbackcomments.html
- May 1, 2016
+ This software is part of iowahills_dsp, a set of DSP routines under MIT License.
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
+ Copyright (c) 2021  Hayati Ayguen <h_ayguen@web.de>
+ All rights reserved.
 
- ShowMessage is a C++ Builder function, and it usage has been commented out.
- If you are using C++ Builder, include vcl.h for ShowMessage.
- Otherwise replace ShowMessage with something appropriate for your compiler.
 
  This code generates 2nd order S plane coefficients for the following low pass filter prototypes.
  Butterworth, Chebyshev, Bessel, Gauss, Adjustable Gauss, Inverse Chebyshev, Papoulis, and Elliptic.
@@ -21,12 +16,23 @@
  back any changes we make.
 */
 
-#include <iowahills/LowPassPrototypes.h>
+#include <iowahills/lowpass_prototypes.h>
 #include <iowahills/CplxDMath.hpp>
 #include <iowahills/PFiftyOneRevE.h>
-#include <iowahills/LowPassRoots.h>
+#include <iowahills/lowpass_roots.h>
 
 #include <stdint.h>
+
+//---------------------------------------------------------------------------
+
+#define MAX_POLE_COUNT 20
+
+//---------------------------------------------------------------------------
+
+enum TOurSortTypes{stMax, stMin};
+
+static int SortRootsByZeta(CplxD *Roots, int Count, TOurSortTypes SortType);
+static bool HeapIndexSort(double *Data, int *Index, int N, TOurSortTypes SortType);
 
 //---------------------------------------------------------------------------
 
@@ -35,11 +41,11 @@
 TSPlaneCoeff CalcLowPassProtoCoeff(TLowPassParams Filt)
 {
   int j, DenomCount = 0, NumerCount, NumRoots, ZeroCount;
-  CplxD Poles[ARRAY_DIM], Zeros[ARRAY_DIM];
+  CplxD Poles[IOWA_HILLS_ARRAY_DIM], Zeros[IOWA_HILLS_ARRAY_DIM];
   TSPlaneCoeff Coeff;  // The return value.
 
   // Init the S Plane Coeff. H(s) = (N2*s^2 + N1*s + N0) / (D2*s^2 + D1*s + D0)
-  for(j=0; j<ARRAY_DIM; j++)
+  for(j=0; j<IOWA_HILLS_ARRAY_DIM; j++)
    {
 	Coeff.N2[j] = 0.0;
 	Coeff.N1[j] = 0.0;
@@ -203,7 +209,7 @@ void SetCornerFreq(int PolyCount, double *D2, double *D1, double *D0, double *N2
 	 H = H * ( N2[n] * s * s + N1[n] * s + N0[n] ) / ( D2[n] * s * s + D1[n] * s + D0[n] );
 	}
    H *= Gain;
-   if(cabs(H) < 0.7071)break;  // -3 dB
+   if(iowahills::abs(H) < 0.7071)   break;  // -3 dB
   }
 
  FreqScalar = 1.0/Omega;
@@ -249,9 +255,11 @@ void SetCornerFreq(int PolyCount, double *D2, double *D1, double *D0, double *N2
 // Then the 2nd order coefficients are calculated.
 int GetFilterCoeff(int RootCount, CplxD *Roots, double *A2, double *A1, double *A0)
 {
- int PolyCount, j, k;
+ int PolyCount, j, k, ret;
 
- SortRootsByZeta(Roots, RootCount, stMin);   // stMin places the most negative real part 1st.
+ ret = SortRootsByZeta(Roots, RootCount, stMin);   // stMin places the most negative real part 1st.
+ if (ret)
+   return 0;
 
  // Check for duplicate roots. The Inv Cheby generates duplcate imag roots, and the
  // Elliptic generates duplicate real roots. We set duplicates to a RHP value.
@@ -346,12 +354,12 @@ int RebuildPoly(int PolyCount, double *PolyCoeff, double *A2, double *A1, double
 // This also sets an inconsequential real or imag part to zero.
 // A matched pair of z plane real roots, such as +/- 1, don't come out together.
 // Used above in GetFilterCoeff and the FIR zero plot.
-void SortRootsByZeta(CplxD *Roots, int Count, TOurSortTypes SortType)
+static int SortRootsByZeta(CplxD *Roots, int Count, TOurSortTypes SortType)
 {
  if(Count >= P51_MAXDEGREE)
   {
    //ShowMessage("Count > P51_MAXDEGREE in TPolyForm::SortRootsByZeta()");
-   return;
+   return 1;
   }
 
  int j, k, RootJ[P51_ARRAY_SIZE];
@@ -387,12 +395,13 @@ void SortRootsByZeta(CplxD *Roots, int Count, TOurSortTypes SortType)
    Roots[j] = TempRoots[j];
   }
 
+ return 0;
 }
 //---------------------------------------------------------------------------
 
 
 // Remember to set the Index array to 0, 1, 2, 3, ... N-1
-bool HeapIndexSort(double *Data, int *Index, int N, TOurSortTypes SortType)
+static bool HeapIndexSort(double *Data, int *Index, int N, TOurSortTypes SortType)
 {
  int i, j, k, m, IndexTemp;
  int64_t FailSafe, NSquared; // need this for big sorts
@@ -451,6 +460,4 @@ bool HeapIndexSort(double *Data, int *Index, int N, TOurSortTypes SortType)
 }
 
 //----------------------------------------------------------------------------------
-
-
 

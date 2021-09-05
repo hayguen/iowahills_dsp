@@ -20,8 +20,8 @@
 
 /*
 All the constants used in the kit are here. We believe the primary ones (M_PI, M_SQRT2, etc)
-are supposed to be defined in the math.h file for all c compilers, but if they are not
-in your math.h, or float.h, here is how they are defined.
+are supposed to be defined in the cmath file for all c++ compilers, but if they are not
+in your cmath, or float.h, here is how they are defined.
 
 #define M_LN2       0.693147180559945309417 // log(2) = ln(2)
 #define LOG_OF_TWO  0.301029995663981184    // log10(2)

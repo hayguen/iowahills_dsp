@@ -1,18 +1,9 @@
-
-#include <iowahills/FreqSamplingCode.h>
-#include <iowahills/FIRFilterCode.h> // for the definition of TFIRPassTypes
-
-#include <math.h>
-#include <iowahills/CplxDMath.hpp>
-#include <iowahills/FFTCode.h>
-#include <iowahills/LowPassPrototypes.h>
-
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- If you find a problem, please leave a note at:
- http://www.iowahills.com/feedbackcomments.html
- May 1, 2016
+ This software is part of iowahills_dsp, a set of DSP routines under MIT License.
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
+ Copyright (c) 2021  Hayati Ayguen <h_ayguen@web.de>
+ All rights reserved.
+
 
  This code generates an FIR filter with the frequency over-sampling method. By this we
  mean that we always sample the frequency domain at least 1024 times (a large power of
@@ -52,6 +43,14 @@
  OmegaC      The center frequency. (Only needed for notch filters.)
  PassType    firLPF, firHPF, firBPF, firNOTCH  Needed to set the phase properly. (defined in FIRFilterCode.h)
 */
+
+#include <iowahills/freq_sampling.h>
+#include <iowahills/fft.h>
+#include <iowahills/lowpass_prototypes.h>
+#include <iowahills/CplxDMath.hpp>
+
+#include <cmath>
+
 
 int SampledFreqFIR(int NumTaps, double *FirCoeff, double *HofSReal, double *HofSImag, double OmegaC, TFIRPassTypes PassType)
 {
@@ -228,3 +227,4 @@ void SampledFreqAnalog(int NumTaps, double *FirCoeff, double *HofSReal, double *
 }
 
 //---------------------------------------------------------------------------
+

@@ -54,26 +54,32 @@ endif()
 
 
 set( HDRS
+  include/iowahills/limits.h
   include/iowahills/CplxDMath.hpp
-  include/iowahills/FFTCode.h
-  include/iowahills/FIRFilterCode.h
-  include/iowahills/FreqSamplingCode.h
-  include/iowahills/IIRFilterCode.h
-  include/iowahills/LowPassPrototypes.h
-  include/iowahills/LowPassRoots.h
-  include/iowahills/NewParksMcClellan.h
+  include/iowahills/windowing.h
+  include/iowahills/fft.h
+  include/iowahills/goertzel.h
+  include/iowahills/fir.h
+  include/iowahills/freq_sampling.h
+  include/iowahills/iir.h
+  include/iowahills/lowpass_prototypes.h
+  include/iowahills/lowpass_roots.h
+  include/iowahills/parks_mcclellan.h
   include/iowahills/PFiftyOneRevE.h
   include/iowahills/QuadRootsRevH.h
 )
 
 set( SRCS
-  src/FFTCode.cpp
-  src/FIRFilterCode.cpp
-  src/FreqSamplingCode.cpp
-  src/IIRFilterCode.cpp
-  src/LowPassPrototypes.cpp
-  src/LowPassRoots.cpp
-  src/NewParksMcClellan.cpp
+  src/non_throwing_vector.h
+  src/fft.cpp
+  src/goertzel.cpp
+  src/windowing.cpp
+  src/fir.cpp
+  src/freq_sampling.cpp
+  src/iir.cpp
+  src/lowpass_prototypes.cpp
+  src/lowpass_roots.cpp
+  src/parks_mcclellan.cpp
   src/PFiftyOneRevE.cpp
   src/QuadRootsRevH.cpp
   ${HDRS}
@@ -90,6 +96,7 @@ if (USE_DEBUG_ASAN)
 endif()
 
 target_compile_options(iowa_hills_dsp PRIVATE $<$<C_COMPILER_ID:GNU>:-Wall -Wextra -pedantic>)
+target_compile_options(iowa_hills_dsp PRIVATE $<$<C_COMPILER_ID:Clang>:-Wall -Wextra -pedantic>)
 target_link_libraries( iowa_hills_dsp ${MATHLIB} )
 
 target_include_directories(iowa_hills_dsp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -115,4 +122,44 @@ if (USE_DEBUG_ASAN)
   target_compile_options(example PRIVATE "-fsanitize=address")
 endif()
 target_compile_options(example PRIVATE $<$<C_COMPILER_ID:GNU>:-Wall -Wextra -pedantic>)
+target_compile_options(example PRIVATE $<$<C_COMPILER_ID:Clang>:-Wall -Wextra -pedantic>)
+
 target_link_libraries( example iowa_hills_dsp ${MATHLIB} ${ASANLIB} )
+
+
+#######################################################
+# tools
+######################################################
+
+add_executable(pmord tools/pmord_tool.cpp)
+target_compile_definitions(pmord PRIVATE _USE_MATH_DEFINES)
+if (USE_DEBUG_ASAN)
+  target_compile_options(pmord PRIVATE "-fsanitize=address")
+endif()
+target_compile_options(pmord PRIVATE $<$<C_COMPILER_ID:GNU>:-Wall -Wextra -pedantic>)
+target_compile_options(pmord PRIVATE $<$<C_COMPILER_ID:Clang>:-Wall -Wextra -pedantic>)
+target_link_libraries( pmord iowa_hills_dsp ${MATHLIB} ${ASANLIB} )
+
+
+#######################################################
+# tests
+######################################################
+
+add_executable(test_fft tests/test_fft.cpp)
+target_compile_definitions(test_fft PRIVATE _USE_MATH_DEFINES)
+if (USE_DEBUG_ASAN)
+  target_compile_options(test_fft PRIVATE "-fsanitize=address")
+endif()
+target_compile_options(test_fft PRIVATE $<$<C_COMPILER_ID:GNU>:-Wall -Wextra -pedantic>)
+target_compile_options(test_fft PRIVATE $<$<C_COMPILER_ID:Clang>:-Wall -Wextra -pedantic>)
+target_link_libraries( test_fft iowa_hills_dsp ${MATHLIB} ${ASANLIB} )
+
+
+enable_testing()
+
+add_test(NAME test_fft
+  COMMAND "${CMAKE_CURRENT_BINARY_DIR}/test_fft"
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
+

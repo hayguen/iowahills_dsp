@@ -1,10 +1,8 @@
-
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- If you find a problem, please leave a note at:
- http://www.iowahills.com/feedbackcomments.html
- May 1, 2016
+ This software is part of iowahills_dsp, a set of DSP routines under MIT License.
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
+ Copyright (c) 2021  Hayati Ayguen <h_ayguen@web.de>
+ All rights reserved.
 
 
  This code calculates the roots for the following filter polynomials.
@@ -27,12 +25,16 @@
 */
 
 
-#include <iowahills/LowPassRoots.h>
-
-#include <math.h>
-
+#include <iowahills/lowpass_roots.h>
 #include <iowahills/CplxDMath.hpp>
 #include <iowahills/PFiftyOneRevE.h>
+
+#include <cmath>
+
+
+#define MAX_ELLIP_ITER 15
+#define ELLIPARRAYSIZE 20  // needs to be > 10 and >= Max Num Poles + 1
+
 
 //---------------------------------------------------------------------------
 // This used by several of the functions below. It returns a double so
@@ -41,7 +43,7 @@ double Factorial(int N)
 {
  int j;
  double Fact = 1.0;
- for(j=1; j<=N; j++)Fact *= (double)j;
+ for(j=1; j<=N; j++)    Fact *= (double)j;
  return(Fact);
 }
 
@@ -52,20 +54,19 @@ double Factorial(int N)
 void ReverseCoeff(double *P, int N)
 {
  int j;
- double Temp;
  for(j=0; j<=N/2; j++)
   {
-   Temp = P[j];
+   double Temp = P[j];
    P[j] = P[N-j];
    P[N-j] = Temp;
   }
 
  for(j=N; j>=1; j--)
   {
-   if(P[0] != 0.0)P[j] /= P[0];
+   if(P[0] != 0.0)
+     P[j] /= P[0];
   }
  P[0] = 1.0;
-
 }
 
 //---------------------------------------------------------------------------
@@ -74,18 +75,17 @@ void ReverseCoeff(double *P, int N)
 // We fill the array Roots[] and return the number of roots.
 int ButterworthPoly(int NumPoles, CplxD *Roots)
 {
-  int j, n, N;
-  double Theta;
-
-  N = NumPoles;
-  n = 0;
-  for(j=0; j<N/2; j++)
+  const int N = NumPoles;
+  int n = 0;
+  for(int j=0; j<N/2; j++)
    {
-	Theta = M_PI * (double)(2*j+N+1)/(double)(2*N);
-	Roots[n++] = CplxD(cos(Theta), sin(Theta) );
-    Roots[n++] = CplxD(cos(Theta), -sin(Theta) );
+    const double Theta = M_PI * (double)(2*j+N+1)/(double)(2*N);
+    const double c = cos(Theta);
+    const double s = sin(Theta);
+    Roots[n++] = CplxD(c, s);
+    Roots[n++] = CplxD(c, -s);
    }
-  if(N%2 == 1)Roots[n++] = CplxD(-1.0, 0.0); // The real root for odd pole counts.
+  if(N%2 == 1)  Roots[n++] = CplxD(-1.0, 0.0); // The real root for odd pole counts.
   return(N);
 }
 
@@ -94,27 +94,23 @@ int ButterworthPoly(int NumPoles, CplxD *Roots)
 // This calculates the roots for a Chebyshev filter directly. (No root finder needed)
 int ChebyshevPoly(int NumPoles, double Ripple, CplxD *Roots)
 {
- int j, n, N;
- double Sigma, Omega;
- double Arg, Theta, Epsilon;
-
- N = NumPoles;
- Epsilon = pow(10.0, Ripple / 10.0) - 1.0;
+ const int N = NumPoles;
+ double Epsilon = pow(10.0, Ripple / 10.0) - 1.0;
  Epsilon = sqrt(Epsilon);
- if(Epsilon < 0.00001)Epsilon = 0.00001;
- if(Epsilon > 0.996)Epsilon = 0.996;
+ if(Epsilon < 0.00001)  Epsilon = 0.00001;
+ if(Epsilon > 0.996)    Epsilon = 0.996;
  Epsilon = 1.0/Epsilon;
- Arg = log(Epsilon + sqrt(Epsilon*Epsilon + 1.0)) / (double)N;  // = asinh(Epsilon) / (double)N;
- n=0;
- for(j=0; j<N/2; j++)
+ const double Arg = log(Epsilon + sqrt(Epsilon*Epsilon + 1.0)) / (double)N;  // = asinh(Epsilon) / (double)N;
+ int n=0;
+ for(int j=0; j<N/2; j++)
   {
-   Theta = (2*j + 1) * M_PI_2 / (double)N;
-   Sigma = -sinh(Arg) * sin(Theta);
-   Omega =  cosh(Arg) * cos(Theta);
+   const double Theta = (2*j + 1) * M_PI_2 / (double)N;
+   const double Sigma = -sinh(Arg) * sin(Theta);
+   const double Omega =  cosh(Arg) * cos(Theta);
    Roots[n++] = CplxD(Sigma, Omega );
    Roots[n++] = CplxD(Sigma, -Omega );
   }
- if(N%2 == 1)Roots[n++] = CplxD(-sinh(Arg), 0.0); // The real root for odd pole counts.
+ if(N%2 == 1)   Roots[n++] = CplxD(-sinh(Arg), 0.0); // The real root for odd pole counts.
  return(N);
 }
 
@@ -123,22 +119,20 @@ int ChebyshevPoly(int NumPoles, double Ripple, CplxD *Roots)
 // The Gaussian Poly is simply 1 - s^2 + s^4 /2! - s^6 / 3! .... seeHumpherys p. 414.
 int GaussianPoly(int NumPoles, CplxD *Roots)
 {
- int j, N, RootsCount;
  double GaussCoeff[P51_ARRAY_SIZE];
-
- N = NumPoles;
+ const int N = NumPoles;
  GaussCoeff[0] = 1.0;
  GaussCoeff[1] = 0.0;
- for(j=2; j<=2*N; j+=2)
+ for(int j=2; j<=2*N; j+=2)
   {
    GaussCoeff[j] = 1.0 / Factorial(j/2);
    GaussCoeff[j+1] = 0.0;
-   if( (j/2) % 2 == 1)GaussCoeff[j] *= -1.0;
+   if( (j/2) % 2 == 1)  GaussCoeff[j] *= -1.0;
   }
 
  // The coefficients are generated in reverse order needed for P51.
  ReverseCoeff(GaussCoeff, N*2);
- RootsCount = FindRoots(N*2, GaussCoeff, Roots);
+ int RootsCount = FindRoots(N*2, GaussCoeff, Roots);
  return(RootsCount);
 }
 
@@ -148,15 +142,13 @@ int GaussianPoly(int NumPoles, CplxD *Roots)
 // The Gaussian Poly is simply 1 - s^2 + s^4 /2! - s^6 / 3! .... seeHumpherys p. 414.
 int AdjustablePoly(int NumPoles, CplxD *Roots, double Gamma)
 {
- int j, N, RootsCount;
  double GaussCoeff[P51_ARRAY_SIZE];
-
- N = NumPoles;
- if(Gamma > 0.0)Gamma *= 2.0; // Gamma < 0 is the orig Gauss and Bessel responses. Gamma > 0 has an asymptotic response, so we double it, which also makes the user interface a bit nicer. i.e. -1 <= Gamma <= 1
+ const int N = NumPoles;
+ if(Gamma > 0.0)    Gamma *= 2.0; // Gamma < 0 is the orig Gauss and Bessel responses. Gamma > 0 has an asymptotic response, so we double it, which also makes the user interface a bit nicer. i.e. -1 <= Gamma <= 1
 
  GaussCoeff[0] = 1.0;
  GaussCoeff[1] = 0.0;
- for(j=2; j<=2*N; j+=2)
+ for(int j=2; j<=2*N; j+=2)
   {
    GaussCoeff[j] = pow(Factorial(j/2), Gamma); // Gamma = -1 is orig Gauss poly, Gamma = 1 approaches a Butterworth response.
    GaussCoeff[j+1] = 0.0;
@@ -165,10 +157,10 @@ int AdjustablePoly(int NumPoles, CplxD *Roots, double Gamma)
 
  // The coefficients are generated in reverse order needed for P51.
  ReverseCoeff(GaussCoeff, N*2);
- RootsCount = FindRoots(N*2, GaussCoeff, Roots);
+ int RootsCount = FindRoots(N*2, GaussCoeff, Roots);
 
  // Scale the imag part of the root by 1.1 to get a response closer to a Butterworth when Gamma = -2
- for(j=0; j<N*2; j++)Roots[j] = CplxD(Roots[j].re, Roots[j].im * 1.10);
+ for(int j=0; j<N*2; j++)   Roots[j] = CplxD(Roots[j].re, Roots[j].im * 1.10);
  return(RootsCount);
 }
 
@@ -178,11 +170,10 @@ int AdjustablePoly(int NumPoles, CplxD *Roots, double Gamma)
 // The highet term is 1, the rest of the terms are calc'd
 int BesselPoly(int NumPoles, CplxD *Roots)
 {
- int k, N, RootsCount;
- double b, PolyCoeff[P51_ARRAY_SIZE];
-
- N = NumPoles;
- for(k=N-1; k>=0; k--)
+ double PolyCoeff[P51_ARRAY_SIZE];
+ double b;
+ const int N = NumPoles;
+ for(int k=N-1; k>=0; k--)
   {
    // b is calc'd as a double because of all the division, but the result is essentially a large int.
    b = Factorial(2*N - k) / Factorial(k) / Factorial(N-k) / pow(2.0, (double)(N-k));
@@ -192,7 +183,7 @@ int BesselPoly(int NumPoles, CplxD *Roots)
 
  // The coefficients are generated in reverse order needed for P51.
  ReverseCoeff(PolyCoeff, N);
- RootsCount = FindRoots(N, PolyCoeff, Roots);
+ int RootsCount = FindRoots(N, PolyCoeff, Roots);
  return(RootsCount);
 }
 
@@ -209,18 +200,19 @@ int BesselPoly(int NumPoles, CplxD *Roots)
 
 int InvChebyPoly(int NumPoles, double StopBanddB, CplxD *ChebyPoles, CplxD *ChebyZeros, int *ZeroCount)
 {
- int j, k, N, PolesCount;
- double Arg, Epsilon, ChebPolyCoeff[P51_ARRAY_SIZE], PolyCoeff[P51_ARRAY_SIZE];
+ double ChebPolyCoeff[P51_ARRAY_SIZE], PolyCoeff[P51_ARRAY_SIZE];
  CplxD  SquaredPolyCoeff[P51_ARRAY_SIZE], A, B;
+ int j, k;
 
- N = NumPoles;
- Epsilon = 1.0 / (pow(10.0,  StopBanddB / 10.0) - 1.0);  // actually Epsilon Squared
+ ChebPolyCoeff[0] = 0;
+ const int N = NumPoles;
+ const double Epsilon = 1.0 / (pow(10.0,  StopBanddB / 10.0) - 1.0);  // actually Epsilon Squared
 
  // This algorithm is from the paper by Richard J Mathar. It generates the coefficients for the Cheb poly.
  // It stores the Nth order coefficient in ChebPolyCoeff[N], and so on. Every other Cheb coeff is 0. See Wikipedia for a table that this code will generate.
  for(j=0; j<=N/2; j++)
   {
-   Arg = Factorial(N-j-1) / Factorial(j) / Factorial(N-2*j);
+   double Arg = Factorial(N-j-1) / Factorial(j) / Factorial(N-2*j);
    if(j % 2 == 1)Arg *= -1.0;
    Arg *= pow(2.0, (double)(N - 2*j)) * (double)N / 2.0;
    ChebPolyCoeff[N - 2*j] = Arg;
@@ -239,19 +231,19 @@ int InvChebyPoly(int NumPoles, double StopBanddB, CplxD *ChebyPoles, CplxD *Cheb
  for(j=0; j<=N; j++)
  for(k=0; k<=N; k++)
   {
-   A = pow(CplxD(0.0,1.0),(double)j) * ChebPolyCoeff[j];
-   B = pow(CplxD(0.0,1.0),(double)k) * ChebPolyCoeff[k];
+   A = iowahills::pow(CplxD(0.0,1.0),(double)j) * ChebPolyCoeff[j];
+   B = iowahills::pow(CplxD(0.0,1.0),(double)k) * ChebPolyCoeff[k];
    SquaredPolyCoeff[j+k] = SquaredPolyCoeff[j+k] + A * B; // these end up entirely real.
   }
 
  // Denominator
  // Now we multiply the coefficients by Epsilon and add 1 to the denominator poly.
  k = 0;
- for(j=0; j<=2*N; j++)ChebPolyCoeff[j] = SquaredPolyCoeff[j].re * Epsilon;
+ for(j=0; j<=2*N; j++)  ChebPolyCoeff[j] = SquaredPolyCoeff[j].re * Epsilon;
  ChebPolyCoeff[0] += 1.0;
- for(j=0; j<=2*N; j++)PolyCoeff[k++] = ChebPolyCoeff[j];  // Note this order is reversed from the Chebyshev routine.
+ for(j=0; j<=2*N; j++)  PolyCoeff[k++] = ChebPolyCoeff[j];  // Note this order is reversed from the Chebyshev routine.
  k--;
- PolesCount = FindRoots(k, PolyCoeff, ChebyPoles);
+ int PolesCount = FindRoots(k, PolyCoeff, ChebyPoles);
 
 
  // Numerator
@@ -263,7 +255,6 @@ int InvChebyPoly(int NumPoles, double StopBanddB, CplxD *ChebyPoles, CplxD *Cheb
  *ZeroCount = FindRoots(k, PolyCoeff, ChebyZeros);
 
  return(PolesCount);
-
 }
 
 //---------------------------------------------------------------------------
@@ -271,11 +262,10 @@ int InvChebyPoly(int NumPoles, double StopBanddB, CplxD *ChebyPoles, CplxD *Cheb
 // The complete Papouls poly is 1 + Epsilon * P(n) where P(n) is the 2*N Legendre poly.
 int PapoulisPoly(int NumPoles, CplxD *Roots)
 {
- int j, N, RootsCount;
- double Epsilon, PolyCoeff[P51_ARRAY_SIZE];
+ double PolyCoeff[P51_ARRAY_SIZE];
 
- N = NumPoles;
- for(j=0; j<2*N; j++)PolyCoeff[j] = 0.0; // so we don't have to fill all the zero's.
+ const int N = NumPoles;
+ for(int j=0; j<=2*N; j++)  PolyCoeff[j] = 0.0; // so we don't have to fill all the zero's.
 
  switch(N)
   {
@@ -541,11 +531,11 @@ int PapoulisPoly(int NumPoles, CplxD *Roots)
    break;
   }
 
- Epsilon = 0.1; // This controls the amount of pass band roll off.  0.01 < Epsilon < 0.250
+ const double Epsilon = 0.1; // This controls the amount of pass band roll off.  0.01 < Epsilon < 0.250
 
  // The poly is in terms of omega, but we need it in term of s = jw. So we need to
  // multiply the approp coeff by neg 1 to account for j. Then mult by epsilon.
- for(j=0; j<=2*N; j++)
+ for(int j=0; j<=2*N; j++)
   {
    if( (j/2) % 2 == 1 ) PolyCoeff[j] *= -1.0;
    PolyCoeff[j] *= Epsilon;
@@ -556,7 +546,7 @@ int PapoulisPoly(int NumPoles, CplxD *Roots)
 
  // The coefficients are in reverse order needed for P51.
  ReverseCoeff(PolyCoeff, N*2);
- RootsCount = FindRoots(N*2, PolyCoeff, Roots);
+ int RootsCount = FindRoots(N*2, PolyCoeff, Roots);
 
  return(RootsCount);
 }
@@ -575,15 +565,15 @@ int EllipticPoly(int FiltOrder, double Ripple, double DesiredSBdB, CplxD *EllipP
  double DeltaK, PrevErr, Deriv;
  CplxD C;
 
- for(j=0; j<ELLIPARRAYSIZE; j++)K[j] = G[j] = Epsilon[j] = 0.0;
+ for(j=0; j<ELLIPARRAYSIZE; j++)    K[j] = G[j] = Epsilon[j] = 0.0;
  if(Ripple < 0.001)Ripple = 0.001;
  if(Ripple > 1.0)Ripple = 1.0;
  Epsilon[0] = sqrt(pow(10.0, Ripple/10.0) - 1.0);
 
  // Estimate K[0] to get the algorithm started.
  K[0] = (double)(FiltOrder-2)*0.1605 + 0.016;
- if(K[0] < 0.01)K[0] = 0.01;
- if(K[0] > 0.7)K[0] = 0.7;
+ if(K[0] < 0.01)    K[0] = 0.01;
+ if(K[0] > 0.7) K[0] = 0.7;
 
  // This loop calculates K[0] for the desired stopband attenuation. It typically loops < 5 times.
  for(j=0; j<MAX_ELLIP_ITER; j++)
@@ -592,7 +582,7 @@ int EllipticPoly(int FiltOrder, double Ripple, double DesiredSBdB, CplxD *EllipP
    for(k=1; k<10; k++)
 	{
 	 K[k] = pow( K[k-1] / (1.0 + sqrt(1.0 - K[k-1]*K[k-1]) ), 2.0);   // eq. 10
-	 if(K[k] <= 1.0E-6)break;
+     if(K[k] <= 1.0E-6) break;
 	}
    LastK = k;
 
@@ -607,7 +597,7 @@ int EllipticPoly(int FiltOrder, double Ripple, double DesiredSBdB, CplxD *EllipP
    SBdB = 10.0 * log10(1.0 + pow(Epsilon[0]/G[0], 2.0)); // Current stopband attenuation dB
    dBErr = DesiredSBdB - SBdB;
 
-   if(fabs(dBErr) < 0.1)break;
+   if(fabs(dBErr) < 0.1)    break;
    if(j==0) // Do this on the 1st loop so we can calc a derivative.
     {
      if(dBErr > 0)DeltaK = 0.005;
@@ -619,7 +609,7 @@ int EllipticPoly(int FiltOrder, double Ripple, double DesiredSBdB, CplxD *EllipP
      // Use Newtons Method to adjust K[0].
      Deriv = (PrevErr - dBErr)/DeltaK;
      PrevErr = dBErr;
-     if(Deriv == 0.0)break; // This happens when K[0] hits one of the limits set below.
+     if(Deriv == 0.0)   break; // This happens when K[0] hits one of the limits set below.
      DeltaK = dBErr/Deriv;
      if(DeltaK > 0.1)DeltaK = 0.1;
      if(DeltaK < -0.1)DeltaK = -0.1;
@@ -643,7 +633,7 @@ int EllipticPoly(int FiltOrder, double Ripple, double DesiredSBdB, CplxD *EllipP
  for(j=1; j<=FiltOrder/2; j++)
   {
    RealPart = (double)(2*j - 1) * M_PI_2 / (double)FiltOrder;   // eq. 19
-   C = CplxD(0.0, -1.0) / cos(CplxD(-RealPart, ImagPart));      // eq. 20
+   C = CplxD(0.0, -1.0) / iowahills::cos(CplxD(-RealPart, ImagPart));      // eq. 20
    D = 1.0 / cos(RealPart);
    for(k=LastK; k>=1; k--)
 	{
@@ -652,9 +642,9 @@ int EllipticPoly(int FiltOrder, double Ripple, double DesiredSBdB, CplxD *EllipP
 	}
 
    EllipPoles[n] = 1.0/C;
-   EllipPoles[n+1] = EllipPoles[n].conj();
+   EllipPoles[n+1] = iowahills::conj(EllipPoles[n]);
    EllipZeros[n] = CplxD(0.0, D/K[0]);
-   EllipZeros[n+1] = EllipZeros[n].conj();
+   EllipZeros[n+1] = iowahills::conj(EllipZeros[n]);
    n+=2;
   }
  *ZeroCount = n; // n is the num zeros
@@ -671,9 +661,6 @@ int EllipticPoly(int FiltOrder, double Ripple, double DesiredSBdB, CplxD *EllipP
   }
 
  return(n); // n is the num poles. There will be 1 more pole than zeros for odd pole counts.
-
 }
 //---------------------------------------------------------------------------
-
-
 

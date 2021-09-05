@@ -19,7 +19,7 @@ Despite his very permissive words, i interpret as *Public Domain*, i put this re
 
 ## Development
 
-Note: The source contains global variables; thus, the library isn't safe for multithreaded use!
+The sources contained global variables; thus, the library wasn't safe for multithreaded use. Hope, these are completely eliminated now.
 
 I've slightly modified the sources, to get them compile and link - mostly without warnings:
 - removed some unused variables

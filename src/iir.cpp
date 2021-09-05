@@ -1,23 +1,24 @@
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- If you find a problem, please leave a note at:
- http://www.iowahills.com/feedbackcomments.html
- May 1, 2016
+ This software is part of iowahills_dsp, a set of DSP routines under MIT License.
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
+ Copyright (c) 2021  Hayati Ayguen <h_ayguen@web.de>
+ All rights reserved.
 
- ShowMessage is a C++ Builder function, and it usage has been commented out.
- If you are using C++ Builder, include vcl.h for ShowMessage.
- Otherwise replace ShowMessage with something appropriate for your compiler.
 
  See the FilterKitMain.cpp file for an example on how to use this code.
 */
 
-#include <iowahills/IIRFilterCode.h>
+#include <iowahills/iir.h>
 #include <iowahills/PFiftyOneRevE.h>
-#include <iowahills/LowPassPrototypes.h>
+#include <iowahills/lowpass_prototypes.h>
 #include <iowahills/CplxDMath.hpp>
 
 //---------------------------------------------------------------------------
+
+#define OVERFLOW_LIMIT  1.0E20
+
+//---------------------------------------------------------------------------
+
 /*
  This calculates the coefficients for IIR filters from a set of 2nd order s plane coefficients
  which are obtained by calling CalcLowPassProtoCoeff() in LowPassPrototypes.cpp.
@@ -33,8 +34,8 @@ TIIRCoeff CalcIIRFilterCoeff(TIIRFilterParams IIRFilt)
  int j, k;
  double Scalar, SectionGain, Coeff[5];
  double A, B, C, D, E, F, T, Q, Arg;
- double a2[ARRAY_DIM], a1[ARRAY_DIM], a0[ARRAY_DIM];
- double b2[ARRAY_DIM], b1[ARRAY_DIM], b0[ARRAY_DIM];
+ double a2[IOWA_HILLS_ARRAY_DIM], a1[IOWA_HILLS_ARRAY_DIM], a0[IOWA_HILLS_ARRAY_DIM];
+ double b2[IOWA_HILLS_ARRAY_DIM], b1[IOWA_HILLS_ARRAY_DIM], b0[IOWA_HILLS_ARRAY_DIM];
  CplxD Roots[5];
 
  TIIRCoeff IIR;                // Gets returned by this function.
@@ -54,7 +55,7 @@ TIIRCoeff CalcIIRFilterCoeff(TIIRFilterParams IIRFilt)
 
 
  // Init the IIR structure.
- for(j=0; j<ARRAY_DIM; j++)
+ for(j=0; j<IOWA_HILLS_ARRAY_DIM; j++)
   {
    IIR.a0[j] = 0.0;  IIR.b0[j] = 0.0;
    IIR.a1[j] = 0.0;  IIR.b1[j] = 0.0;
@@ -421,7 +422,7 @@ void FilterWithIIR(TIIRCoeff IIRCoeff, double *Signal, double *FilteredSignal, i
 double SectCalc(int j, int k, double x, TIIRCoeff IIRCoeff)
 {
  double y, CenterTap;
- static double RegX1[ARRAY_DIM], RegX2[ARRAY_DIM], RegY1[ARRAY_DIM], RegY2[ARRAY_DIM], MaxRegVal;
+ static double RegX1[IOWA_HILLS_ARRAY_DIM], RegX2[IOWA_HILLS_ARRAY_DIM], RegY1[IOWA_HILLS_ARRAY_DIM], RegY2[IOWA_HILLS_ARRAY_DIM], MaxRegVal;
  static bool MessageShown = false;
 
  // Zero the regiisters on the 1st call or on an overflow condition. The overflow limit used
@@ -435,7 +436,7 @@ double SectCalc(int j, int k, double x, TIIRCoeff IIRCoeff)
     }
 
    MaxRegVal = 1.0E-12;
-   for(int i=0; i<ARRAY_DIM; i++)
+   for(int i=0; i<IOWA_HILLS_ARRAY_DIM; i++)
     {
      RegX1[i] = 0.0;
      RegX2[i] = 0.0;
@@ -487,7 +488,7 @@ void IIRFreqResponse(TIIRCoeff IIR, int NumSections, double *RealHofZ, double *I
      HofZ *= IIR.a0[n];  // This can be in the denominator, but only if a0=1. a0 can be other than 1.0 to adjust the filter's gain. See the bottom of the CalcIIRFilterCoeff() function.
 	 HofZ *= IIR.b0[n] + IIR.b1[n] * z1 + IIR.b2[n] * z2;  // Numerator
      Denom = 1.0 + IIR.a1[n] * z1 + IIR.a2[n] * z2;        // Denominator
-     if(cabs(Denom) < 1.0E-12)Denom = 1.0E-12;             // A pole on the unit circle would cause this to be zero, so this should never happen. It could happen however if the filter also has a zero at this frequency. Then H(z) needs to be determined by L'Hopitals rule at this freq.
+     if(iowahills::abs(Denom) < 1.0E-12)    Denom = 1.0E-12;    // A pole on the unit circle would cause this to be zero, so this should never happen. It could happen however if the filter also has a zero at this frequency. Then H(z) needs to be determined by L'Hopitals rule at this freq.
      HofZ /= Denom;
 	}
    RealHofZ[j] = HofZ.re;
@@ -496,6 +497,4 @@ void IIRFreqResponse(TIIRCoeff IIR, int NumSections, double *RealHofZ, double *I
 }
 
 //---------------------------------------------------------------------------
-
-
 

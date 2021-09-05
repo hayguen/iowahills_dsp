@@ -1,10 +1,9 @@
-
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- If you find a problem, please leave a note at:
- http://www.iowahills.com/feedbackcomments.html
- Sept 12, 2016 Rev H
+ This software is part of iowahills_dsp, a set of DSP routines under MIT License.
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
+ Copyright (c) 2021  Hayati Ayguen <h_ayguen@web.de>
+ All rights reserved.
+
 
  This root solver code finds 1st, 2nd, 3rd, and 4th order roots algebraically, as
  opposed to iteration.
@@ -30,15 +29,21 @@
  has removed leading and trailing zeros and normalized P.
 
  On a 2 GHz Pentium it takes about 2 micro sec for QuadCubicRoots to return.
-
- ShowMessage is a C++ Builder function, and it usage has been commented out.
- If you are using C++ Builder, include vcl.h for ShowMessage.
- Otherwise replace ShowMessage with something appropriate for your compiler.
 */
 
 #include <iowahills/QuadRootsRevH.h>
 
-#include <math.h>
+#include <cmath>
+
+//---------------------------------------------------------------------------
+
+#define LDBL_EPSILON 1.084202172485504434E-19L
+// #define M_SQRT3 1.7320508075688772935274463L   // sqrt(3)
+#define M_SQRT3_2 0.8660254037844386467637231L   // sqrt(3)/2
+// #define DBL_EPSILON  2.2204460492503131E-16    // 2^-52  typically defined in the compiler's float.h
+#define ZERO_PLUS   8.88178419700125232E-16      // 2^-50 = 4*DBL_EPSILON
+#define ZERO_MINUS -8.88178419700125232E-16
+#define TINY_VALUE  1.0E-30                      // This is what we use to test for zero. Usually to avoid divide by zero.
 
 //---------------------------------------------------------------------------
 
@@ -51,15 +56,14 @@ int QuadCubicRoots(long double *Coeff, int N, long double *RealRoot, long double
    return(0);
   }
 
- int j;
  long double P[5];
 
  // Must init to zero, in case N is reduced.
- for(j=0; j<N; j++)RealRoot[j] = ImagRoot[j] = 0.0;
- for(j=0; j<5; j++)P[j] = 0.0;
+ for(int j=0; j<N; j++) RealRoot[j] = ImagRoot[j] = 0.0;
+ for(int j=0; j<5; j++) P[j] = 0.0;
 
  // The functions below modify the coeff array, so we pass P instead of Coeff.
- for(j=0; j<=N; j++)P[j] = (long double)Coeff[j];
+ for(int j=0; j<=N; j++)    P[j] = (long double)Coeff[j];
 
  // Remove trailing zeros. A tiny P[N] relative to P[N-1] is not allowed.
  while(N > 0 && fabsl(P[N]) <= TINY_VALUE * fabsl(P[N-1]))
@@ -70,21 +74,21 @@ int QuadCubicRoots(long double *Coeff, int N, long double *RealRoot, long double
  // Remove leading zeros.
  while(N > 0 && P[0] == 0.0)
   {
-   for(j=0; j<N; j++)P[j] = P[j+1];
+   for(int j=0; j<N; j++)   P[j] = P[j+1];
    N--;
   }
 
  // P[0] must = 1
  if(P[0] != 1.0)
   {
-   for(j=1; j<=N; j++)P[j] /= P[0];
+   for(int j=1; j<=N; j++)  P[j] /= P[0];
    P[0] = 1.0;
   }
 
  // Calculate the roots.
- if(N==4)BiQuadRoots(P, RealRoot, ImagRoot);
- else if(N==3)CubicRoots(P, RealRoot, ImagRoot);
- else if(N==2)QuadRoots(P, RealRoot, ImagRoot);
+ if(N==4)   BiQuadRoots(P, RealRoot, ImagRoot);
+ else if(N==3)  CubicRoots(P, RealRoot, ImagRoot);
+ else if(N==2)  QuadRoots(P, RealRoot, ImagRoot);
  else if(N==1)
   {
    RealRoot[0] = -P[1]/P[0];
@@ -102,8 +106,7 @@ int QuadCubicRoots(long double *Coeff, int N, long double *RealRoot, long double
 // If P[2] = 0, the zero is returned in RealRoot[0].
 void QuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 {
- long double D;
- D = P[1]*P[1] - 4.0*P[2];
+ long double D = P[1]*P[1] - 4.0*P[2];
  if(D >= 0.0)  // 1 or 2 real roots
   {
    RealRoot[0] = (-P[1] - sqrtl(D)) * 0.5;   // = -P[1] if P[2] = 0
@@ -122,13 +125,12 @@ void QuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 // This finds the roots of y = P0x^3 + P1x^2 + P2x+ P3   P[0] = 1
 void CubicRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 {
- int j;
  long double  s, t, b, c, d, Scalar;
  bool CubicPolyReversed = false;
 
  // Scale the polynomial so that P[N] = +/-1. This moves the roots toward unit circle.
  Scalar = powl(fabsl(P[3]),1.0/3.0);
- for(j=1; j<=3; j++)P[j] /= powl(Scalar,(long double)j);
+ for(int j=1; j<=3; j++)    P[j] /= powl(Scalar,(long double)j);
 
  if(fabsl(P[3]) < fabsl(P[2]) && P[2] > 0.0)
   {
@@ -166,7 +168,7 @@ void CubicRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 
  else // d < 0.0  3 real roots
   {
-   if(b == 0.0)d = M_PI_2 / 3.0; //  b can be as small as 1.0E-25
+   if(b == 0.0) d = M_PI_2 / 3.0; //  b can be as small as 1.0E-25
    else d = atanl(sqrtl(fabsl(d))/fabsl(b)) / 3.0;
 
    if(b < 0.0) b =  2.0 * sqrtl(fabsl(t));
@@ -184,11 +186,11 @@ void CubicRoots(long double *P, long double *RealRoot, long double *ImagRoot)
  }
 
  // If we reversed the poly, the roots need to be inverted.
- if(CubicPolyReversed)InvertRoots(3, RealRoot, ImagRoot);
+ if(CubicPolyReversed)  InvertRoots(3, RealRoot, ImagRoot);
 
   // Apply the Scalar to the roots.
- for(j=0; j<3; j++)RealRoot[j] *= Scalar;
- for(j=0; j<3; j++)ImagRoot[j] *= Scalar;
+ for(int j=0; j<3; j++) RealRoot[j] *= Scalar;
+ for(int j=0; j<3; j++) ImagRoot[j] *= Scalar;
 }
 
 //---------------------------------------------------------------------------
@@ -197,13 +199,12 @@ void CubicRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 // This function calls CubicRoots and QuadRoots
 void BiQuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 {
- int j;
- long double a, b, c, d, e, Q3Limit, Scalar, Q[4], MinRoot;
+ long double a, b, c, d, e, Q[4], MinRoot;
  bool QuadPolyReversed = false;
 
  // Scale the polynomial so that P[N] = +/- 1. This moves the roots toward unit circle.
- Scalar = powl(fabsl(P[4]),0.25);
- for(j=1; j<=4; j++)P[j] /= powl(Scalar,(long double)j);
+ const long double Scalar = powl(fabsl(P[4]),0.25);
+ for(int j=1; j<=4; j++)    P[j] /= powl(Scalar,(long double)j);
 
  // Having P[1] < P[3] helps with the Q[3] calculation and test.
  if(fabsl(P[1]) > fabsl(P[3]))
@@ -229,7 +230,7 @@ void BiQuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
  of ~ -1E-28. When this happens, we assume Q[2] should also be small. Q[3] can also be tiny with
  2 sets of equal real roots. Then P[1] and P[3], are approx equal. */
 
- Q3Limit = ZERO_MINUS;
+ long double Q3Limit = ZERO_MINUS;
  if( fabsl(fabsl(P[1]) - fabsl(P[3])) >= ZERO_PLUS &&
      Q[3] > ZERO_MINUS && fabsl(Q[2]) < 1.0E-5 ) Q3Limit = 0.0;
 
@@ -239,15 +240,16 @@ void BiQuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 
    // Find the smallest positive real root. One of the real roots is always positive.
    MinRoot = 1.0E100;
-   for(j=0; j<3; j++)
+   for(int j=0; j<3; j++)
     {
-     if(ImagRoot[j] == 0.0 && RealRoot[j] > 0 && RealRoot[j] < MinRoot)MinRoot = RealRoot[j];
+     if(ImagRoot[j] == 0.0 && RealRoot[j] > 0 && RealRoot[j] < MinRoot)
+       MinRoot = RealRoot[j];
     }
 
    d = 4.0*MinRoot;
    a += d;
-   if(a*b < 0.0)Q[1] = -sqrtl(d);
-   else         Q[1] = sqrtl(d);
+   if(a*b < 0.0)    Q[1] = -sqrtl(d);
+   else             Q[1] = sqrtl(d);
    b = 0.5 * (a + b/Q[1]);
   }
  else
@@ -256,13 +258,13 @@ void BiQuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
     {
      b = sqrtl(fabsl(c));
      d = b + b - a;
-     if(d > 0.0)Q[1] = sqrtl(fabsl(d));
-     else       Q[1] = 0.0;
+     if(d > 0.0)    Q[1] = sqrtl(fabsl(d));
+     else           Q[1] = 0.0;
     }
    else
     {
-     if(Q[1] > 0.0)b =  2.0*sqrtl(fabsl(Q[2])) + Q[1];
-     else          b = -2.0*sqrtl(fabsl(Q[2])) + Q[1];
+     if(Q[1] > 0.0) b =  2.0*sqrtl(fabsl(Q[2])) + Q[1];
+     else           b = -2.0*sqrtl(fabsl(Q[2])) + Q[1];
      Q[1] = 0.0;
     }
   }
@@ -277,20 +279,20 @@ void BiQuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
    Q[2] = b;
    QuadRoots(Q, RealRoot+2, ImagRoot+2);
 
-   for(j=0; j<4; j++)RealRoot[j] -= e;
+   for(int j=0; j<4; j++)   RealRoot[j] -= e;
  }
  else // b==0 with 4 equal real roots
   {
-   for(j=0; j<4; j++)RealRoot[j] = -e;
-   for(j=0; j<4; j++)ImagRoot[j] = 0.0;
+   for(int j=0; j<4; j++)   RealRoot[j] = -e;
+   for(int j=0; j<4; j++)   ImagRoot[j] = 0.0;
   }
 
  // If we reversed the poly, the roots need to be inverted.
- if(QuadPolyReversed)InvertRoots(4, RealRoot, ImagRoot);
+ if(QuadPolyReversed)   InvertRoots(4, RealRoot, ImagRoot);
 
  // Apply the Scalar to the roots.
- for(j=0; j<4; j++)RealRoot[j] *= Scalar;
- for(j=0; j<4; j++)ImagRoot[j] *= Scalar;
+ for(int j=0; j<4; j++) RealRoot[j] *= Scalar;
+ for(int j=0; j<4; j++) ImagRoot[j] *= Scalar;
 }
 
 //---------------------------------------------------------------------------
@@ -298,17 +300,15 @@ void BiQuadRoots(long double *P, long double *RealRoot, long double *ImagRoot)
 // A reversed polynomial has its roots at the same angle, but reflected about the unit circle.
 void ReversePoly(long double *P, int N)
 {
- int j;
- long double Temp;
- for(j=0; j<=N/2; j++)
+ for(int j=0; j<=N/2; j++)
   {
-   Temp = P[j];
+   long double Temp = P[j];
    P[j] = P[N-j];
    P[N-j] = Temp;
   }
  if(P[0] != 0.0)
   {
-   for(j=N; j>=0; j--)P[j] /= P[0];
+   for(int j=N; j>=0; j--)  P[j] /= P[0];
   }
 }
 
@@ -316,12 +316,10 @@ void ReversePoly(long double *P, int N)
 // This is used in conjunction with ReversePoly
 void InvertRoots(int N, long double *RealRoot, long double *ImagRoot)
 {
- int j;
- long double Mag;
- for(j=0; j<N; j++)
+ for(int j=0; j<N; j++)
   {
    // complex math for 1/x
-   Mag = RealRoot[j] * RealRoot[j] + ImagRoot[j] * ImagRoot[j];
+   long double Mag = RealRoot[j] * RealRoot[j] + ImagRoot[j] * ImagRoot[j];
    if(Mag != 0.0)
     {
      RealRoot[j] /=  Mag;
@@ -330,5 +328,4 @@ void InvertRoots(int N, long double *RealRoot, long double *ImagRoot)
   }
 }
 //---------------------------------------------------------------------------
-
 

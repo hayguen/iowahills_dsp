@@ -1,10 +1,6 @@
 
 /*
- By Daniel Klostermann
- Iowa Hills Software, LLC  IowaHills.com
- If you find a problem, please leave a note at:
- http://www.iowahills.com/feedbackcomments.html
- May 1, 2016
+ 2016 By Daniel Klostermann, Iowa Hills Software, LLC  IowaHills.com
 
  This file is an example of how to use the code kit.
 
@@ -19,16 +15,16 @@
 
 #include "FilterKitMain.h"
 
-#include <iowahills/FFTCode.h>             // The FFT code and the windowing code (Kaiser and Sinc windows, etc.)
-#include <iowahills/IIRFilterCode.h>       // The IIR filter code.
-#include <iowahills/FIRFilterCode.h>       // The FIR filter code.
-#include <iowahills/NewParksMcClellan.h>   // The Parks McClellan FIR algorithm code.
-#include <iowahills/FreqSamplingCode.h>  //
+#include <iowahills/fft.h>       // The FFT code and the windowing code (Kaiser and Sinc windows, etc.)
+#include <iowahills/iir.h>       // The IIR filter code.
+#include <iowahills/fir.h>       // The FIR filter code.
+#include <iowahills/parks_mcclellan.h>   // The Parks McClellan FIR algorithm code.
+#include <iowahills/freq_sampling.h>  //
 
 //---------------------------------------------------------------------------
 
-// ExampleFIRCall shows how to use the functions in the FIRFilterCode and NewParksMcClellan files.
-// Select between RectWinFIR and NewParksMcClellan by commenting out the undesired type in 2 places.
+// ExampleFIRCall shows how to use the functions in the FIRFilterCode and ParksMcClellan files.
+// Select between RectWinFIR and ParksMcClellan by commenting out the undesired type in 2 places.
 
 // Both of these algorithms are defined by band edges, but these edges don't correspond
 // to the filter's -3 dB point. This uses the FIRFreqError function to set the -3 dB at OmegaC
@@ -57,10 +53,10 @@ void ExampleFIRCall(FILE *OutputFileParam)
                                       // 0.01 <= ParksWidth <= 0.15 if BPF or NOTCH or if NumTaps > 70
 
 
- // Use either RectWinFIR or NewParksMcClellan to calculate the FIR Coefficients.
+ // Use either RectWinFIR or ParksMcClellan to calculate the FIR Coefficients.
  RectWinFIR(FIRCoeff, NumTaps, PassType, OmegaC, BW);
  FIRFilterWindow(FIRCoeff, NumTaps, WindowType, WinBeta); // Use a window with RectWinFIR.
- //NewParksMcClellan(FIRCoeff, NumTaps, PassType, OmegaC, BW, ParksWidth); // This doesn't require a window, but one may be used.
+ //ParksMcClellan(FIRCoeff, NumTaps, PassType, OmegaC, BW, ParksWidth); // This doesn't require a window, but one may be used.
 
  if(FreqCorrection && PassType != firALLPASS)
   {
@@ -73,7 +69,7 @@ void ExampleFIRCall(FILE *OutputFileParam)
    // Recalculate the filter with the corrected OmegaC and BW values.
    RectWinFIR(FIRCoeff, NumTaps, PassType, OmegaC, BW);
    FIRFilterWindow(FIRCoeff, NumTaps, WindowType, WinBeta);  // Use a window with RectWinFIR.
-   //NewParksMcClellan(FIRCoeff, NumTaps, PassType, OmegaC, BW, ParksWidth); // This doesn't require a window, but one may be used.
+   //ParksMcClellan(FIRCoeff, NumTaps, PassType, OmegaC, BW, ParksWidth); // This doesn't require a window, but one may be used.
 
    OmegaC = OrigOmega; // Restore these in case they are needed.
    BW = OrigBW;
