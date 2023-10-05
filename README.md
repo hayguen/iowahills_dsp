@@ -36,8 +36,12 @@ Thus, the example(s) directory has an own CMakeLists.txt entry point, which requ
 * BSL, C++: https://github.com/hayguen/spuce
 * MIT, C++: https://github.com/electro-smith/DaisySP
 * MIT, C/C++: https://github.com/jgaeddert/liquid-dsp
+* MIT, C++: https://github.com/signalsmith-audio/dsp
+* BSL, C++: https://github.com/hbe72/cdsp
 * LGPL, C++: https://github.com/AlexandreRouma/dsp
+* ???, C++: https://github.com/AlexandreRouma/cdsp
 * LGPL: https://github.com/lsp-plugins/lsp-dsp-lib
+* LGPL: https://github.com/dac1976/dsp
 * GPL: https://github.com/kfrlib/kfr
 * GPL: https://github.com/mohabouje/eDSP
 * Matlab: https://github.com/dario-pilori/dsp-library
