@@ -30,3 +30,14 @@ I've slightly modified the sources, to get them compile and link - mostly withou
 
 Despite above changes, i've also added minimal cmake support with support for the install and uninstall targets.
 Thus, the example(s) directory has an own CMakeLists.txt entry point, which requires the library, to be installed.
+
+## Related
+
+* BSL, C++: https://github.com/hayguen/spuce
+* MIT, C++: https://github.com/electro-smith/DaisySP
+* MIT, C/C++: https://github.com/jgaeddert/liquid-dsp
+* LGPL, C++: https://github.com/AlexandreRouma/dsp
+* LGPL: https://github.com/lsp-plugins/lsp-dsp-lib
+* GPL: https://github.com/kfrlib/kfr
+* GPL: https://github.com/mohabouje/eDSP
+* Matlab: https://github.com/dario-pilori/dsp-library
