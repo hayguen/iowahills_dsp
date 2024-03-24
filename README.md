@@ -1,6 +1,8 @@
 # iowahills_dsp
 Repo for Code Kit from http://www.iowahills.com/
 
+Site is reportedly down since September, 2021. Wayback machine has a backup: https://web.archive.org/web/20171110201917/http://iowahills.com/
+
 A platform-independent C/C++ library with many **DSP** (digital signal processing) functions, amongst also *FIR* and *IIR* filter design - but also *FFT*, *DFT*, *Goertzel* and *Windowing* functions. Find a detailed description at http://www.iowahills.com/A7ExampleCodePage.html
 
 
