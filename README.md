@@ -6,6 +6,20 @@ Site is reportedly down since September, 2021. Wayback machine has a backup: htt
 A platform-independent C/C++ library with many **DSP** (digital signal processing) functions, amongst also *FIR* and *IIR* filter design - but also *FFT*, *DFT*, *Goertzel* and *Windowing* functions. Find a detailed description at http://www.iowahills.com/A7ExampleCodePage.html
 
 
+## Build and Install
+
+This library (and the test programs) are built with CMake, a cross-platform and open-source build system.
+Typically the program is not built directly inside the source directory.
+My preference is to build the program in a directory named ``build``, located in the root of the source directory or besides the source directory.
+
+```
+git clone https://github.com/hayguen/iowahills_dsp.git
+cmake -S iowahills_dsp -B build_iowahills_dsp -DCMAKE_BUILD_TYPE=Release
+cmake --build build_iowahills_dsp
+sudo cmake --build build_iowahills_dsp --target install
+```
+
+
 ## License
 Iowa Hills Software, LLC, has put several sources online on their site http://www.iowahills.com/.
 There is also a *Code Kit Download(zip)* provided at http://www.iowahills.com/A7ExampleCodePage.html
