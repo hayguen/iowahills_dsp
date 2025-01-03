@@ -12,11 +12,13 @@ This library (and the test programs) are built with CMake, a cross-platform and 
 Typically the program is not built directly inside the source directory.
 My preference is to build the program in a directory named ``build``, located in the root of the source directory or besides the source directory.
 
-```
+```bash
 git clone https://github.com/hayguen/iowahills_dsp.git
-cmake -S iowahills_dsp -B build_iowahills_dsp -DCMAKE_BUILD_TYPE=Release
-cmake --build build_iowahills_dsp
-sudo cmake --build build_iowahills_dsp --target install
+cd iowahills_dsp
+mkdir build && cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+make -j`nproc`
+sudo make install
 ```
 
 
